@@ -1,0 +1,74 @@
+#!/bin/bash
+# Start SNARF MCP Server
+
+set -e
+
+echo "🚀 Starting SNARF MCP Server..."
+
+# Check for .env file
+if [ ! -f .env ]; then
+    echo "❌ .env file not found!"
+    echo "📝 Creating from template..."
+    cp .env.example .env
+    echo "⚠️  Please edit .env and add your OPENAI_API_KEY"
+    exit 1
+fi
+
+# Check if OPENAI_API_KEY is set
+if ! grep -q "OPENAI_API_KEY=sk-" .env; then
+    echo "❌ OPENAI_API_KEY not set in .env file!"
+    echo "Please add your OpenAI API key to the .env file"
+    exit 1
+fi
+
+echo "✅ Environment configured"
+
+# Build containers if needed
+echo "🐳 Building Docker containers..."
+docker-compose build
+
+# Start all services
+echo "🚀 Starting SNARF services..."
+docker-compose up -d
+
+# Wait for services to be ready
+echo "⏳ Waiting for services to be ready..."
+sleep 10
+
+# Check if all services are running
+echo "🔍 Checking service status..."
+docker-compose ps
+
+echo ""
+echo "✅ SNARF MCP Server is ready!"
+echo ""
+echo "🔌 MCP Server Connection:"
+echo "   Command: docker compose exec -T snarf-mcp python /app/src/mcp_server_standalone.py"
+echo ""
+echo "📡 Available Services:"
+echo "   - MCP Server: stdio via Docker"
+echo "   - REST API: http://localhost:8080"
+echo "   - Database: PostgreSQL on localhost:5432"
+echo ""
+echo "🛠️ MCP Tools Available:"
+echo "   - snarf <url>         : Index content from any URL"
+echo "   - snarf_search <query>: Search indexed content"  
+echo "   - snarf_sources       : List all indexed sources"
+echo ""
+echo "📚 Testing with MCP Inspector:"
+echo "   npx @modelcontextprotocol/inspector \\"
+echo "     docker compose exec -T snarf-mcp python /app/src/mcp_server_standalone.py"
+echo ""
+echo "🔧 Integration Examples:"
+echo ""
+echo "   # For any MCP client configuration:"
+echo '   {'
+echo '     "command": "docker",'
+echo '     "args": ["compose", "exec", "-T", "snarf-mcp", "python", "/app/src/mcp_server_standalone.py"]'
+echo '   }'
+echo ""
+echo "📜 Logs:"
+echo "   docker-compose logs -f snarf-mcp"
+echo ""
+echo "🛑 To stop:"
+echo "   docker-compose down"

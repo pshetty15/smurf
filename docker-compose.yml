@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: smurf-postgres
+    environment:
+      POSTGRES_DB: smurf_db
+      POSTGRES_USER: smurf_user
+      POSTGRES_PASSWORD: smurf_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smurf_user -d smurf_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smurf-network
+
+  smurf-app:
+    build: .
+    container_name: smurf-application
+    environment:
+      # Database configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: smurf_db
+      POSTGRES_USER: smurf_user
+      POSTGRES_PASSWORD: smurf_password
+      
+      # OpenAI configuration (set these in .env file)
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_CHOICE: ${MODEL_CHOICE:-gpt-4o-mini}
+      
+      # Feature flags
+      USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
+      USE_AGENTIC_RAG: ${USE_AGENTIC_RAG:-false}
+      
+      # Application settings
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MAX_CONCURRENT_CRAWLS: ${MAX_CONCURRENT_CRAWLS:-5}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
+      
+      # Git configuration
+      GIT_USER_NAME: "SMURF Bot"
+      GIT_USER_EMAIL: "smurf@localhost"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - repos_cache:/app/data/repos
+    networks:
+      - smurf-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: smurf-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - smurf-network
+    command: redis-server --appendonly yes
+
+  smurf-mcp:
+    build: .
+    container_name: smurf-mcp
+    command: ["python", "/app/src/mcp_server_standalone.py"]
+    environment:
+      # Database configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: smurf_db
+      POSTGRES_USER: smurf_user
+      POSTGRES_PASSWORD: smurf_password
+      
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_CHOICE: ${MODEL_CHOICE:-gpt-4o-mini}
+      
+      # Feature flags
+      USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
+      USE_AGENTIC_RAG: ${USE_AGENTIC_RAG:-false}
+      
+      # Application settings
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - repos_cache:/app/data/repos
+    networks:
+      - smurf-network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  smurf-api:
+    build: .
+    container_name: smurf-api
+    command: ["python", "api_server.py"]
+    environment:
+      # Database configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: smurf_db
+      POSTGRES_USER: smurf_user
+      POSTGRES_PASSWORD: smurf_password
+      
+      # Redis configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # API configuration
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_CHOICE: ${MODEL_CHOICE:-gpt-4o-mini}
+      
+      # Feature flags
+      USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
+      USE_AGENTIC_RAG: ${USE_AGENTIC_RAG:-false}
+    ports:
+      - "8080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - repos_cache:/app/data/repos
+    networks:
+      - smurf-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  repos_cache:
+    driver: local
+
+networks:
+  smurf-network:
+    driver: bridge

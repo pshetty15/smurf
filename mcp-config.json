@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "smurf": {
+      "command": "docker",
+      "args": ["compose", "exec", "-T", "smurf-mcp", "python", "/app/src/mcp_server.py"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
