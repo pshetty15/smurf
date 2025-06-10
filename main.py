@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SMURF - Smart Neural Universal Retrieval Framework
+smurf - smart neural universal retrieval framework
 Main application entry point for containerized deployment
 """
 
@@ -30,8 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class SMURFApplication:
-    """Main SMURF application class."""
+class SmurfApplication:
+    """Main smurf application class."""
     
     def __init__(self):
         self.db = None
@@ -41,13 +41,13 @@ class SMURFApplication:
     async def initialize(self):
         """Initialize the application components."""
         try:
-            logger.info("🚀 Initializing SMURF application...")
+            logger.info("🚀 Initializing smurf application...")
             
             # Load environment variables
             load_dotenv()
             
             # Check required environment variables
-            required_vars = ['OPENAI_API_KEY']
+            required_vars = ['AWS_PROFILE', 'AWS_REGION']
             missing_vars = [var for var in required_vars if not os.getenv(var)]
             if missing_vars:
                 raise ValueError(f"Missing required environment variables: {missing_vars}")
@@ -65,10 +65,10 @@ class SMURFApplication:
             # Create router with processors (GitHub first for better matching)
             self.router = ProcessorRouter([github_processor, web_processor], web_processor)
             
-            logger.info("✅ SNURF initialization complete!")
+            logger.info("✅ smurf initialization complete!")
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize SNURF: {e}")
+            logger.error(f"❌ Failed to initialize smurf: {e}")
             raise
     
     async def process_url(self, url: str, options: dict = None):
@@ -123,7 +123,7 @@ class SMURFApplication:
     
     async def demo_mode(self):
         """Run in demo mode with sample URLs."""
-        logger.info("🎮 Running SNURF in demo mode...")
+        logger.info("🎮 Running smurf in demo mode...")
         
         demo_urls = [
             "https://docs.python.org/3/tutorial/introduction.html",
@@ -147,7 +147,7 @@ class SMURFApplication:
     
     async def run_interactive(self):
         """Run in interactive mode."""
-        logger.info("💬 Starting SMURF interactive mode...")
+        logger.info("💬 Starting smurf interactive mode...")
         logger.info("Commands: 'smurf <url>', 'search <query>', 'sources', 'quit'")
         
         self.running = True
@@ -178,7 +178,7 @@ class SMURFApplication:
                     print("  smurf <url>     - Process a URL")
                     print("  search <query>  - Search the knowledge base")
                     print("  sources         - List available sources")
-                    print("  quit            - Exit SMURF")
+                    print("  quit            - Exit smurf")
                 else:
                     print("Unknown command. Type 'help' for available commands.")
                     
@@ -189,7 +189,7 @@ class SMURFApplication:
     
     async def cleanup(self):
         """Clean up resources."""
-        logger.info("🧹 Cleaning up SMURF resources...")
+        logger.info("🧹 Cleaning up smurf resources...")
         
         if self.router:
             for processor in self.router.processors:
@@ -204,7 +204,7 @@ class SMURFApplication:
 
 async def main():
     """Main entry point."""
-    app = SMURFApplication()
+    app = SmurfApplication()
     
     # Setup signal handlers
     def signal_handler(signum, frame):
@@ -218,31 +218,31 @@ async def main():
         # Initialize application
         await app.initialize()
         
-        # Determine run mode from environment or command line
+        # Parse mode from environment
         mode = os.getenv("SMURF_MODE", "interactive")
-        if len(sys.argv) > 1:
-            mode = sys.argv[1]
         
         if mode == "demo":
             await app.demo_mode()
         elif mode == "api":
-            logger.info("🌐 API mode - use api_server.py instead")
-            sys.exit(1)
+            # API mode is handled by separate api_server.py
+            logger.info("API mode requires running api_server.py separately")
+            await app.run_interactive()
         else:
             await app.run_interactive()
             
     except Exception as e:
-        logger.error(f"❌ Application error: {e}")
-        sys.exit(1)
+        logger.error(f"Application error: {e}")
+        raise
     finally:
         await app.cleanup()
+        logger.info("👋 smurf shutdown complete")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("👋 SMURF shutdown complete")
+        logger.info("👋 smurf shutdown complete")
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         sys.exit(1)

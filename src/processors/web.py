@@ -1,5 +1,5 @@
 """
-Web processor for SNARF.
+Web processor for smurf.
 Handles web crawling using Crawl4AI - extracted from crawl4ai_mcp.py
 """
 import os
@@ -76,12 +76,10 @@ class WebProcessor(BaseProcessor):
     async def _crawl_single_page(self, url: str) -> ProcessorResult:
         """Crawl a single web page."""
         try:
-            # Create crawler configuration
+            # Create simple crawler configuration without extraction strategy
             config = CrawlerRunConfig(
                 cache_mode=CacheMode.BYPASS,
-                word_count_threshold=1,
-                extraction_strategy="LLMExtractionStrategy",
-                chunking_strategy="RegexChunking"
+                word_count_threshold=1
             )
             
             # Crawl the page
@@ -312,9 +310,7 @@ class WebProcessor(BaseProcessor):
                 configs = [
                     CrawlerRunConfig(
                         cache_mode=CacheMode.BYPASS,
-                        word_count_threshold=1,
-                        extraction_strategy="LLMExtractionStrategy",
-                        chunking_strategy="RegexChunking"
+                        word_count_threshold=1
                     ) for _ in batch_urls
                 ]
                 

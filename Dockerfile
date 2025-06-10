@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Playwright requirements
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -14,10 +14,16 @@ RUN apt-get update && apt-get install -y \
     git \
     git-lfs \
     openssh-client \
-    chromium \
-    chromium-driver \
     tree \
     file \
+    # Playwright system dependencies
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libgtk-3-0 \
+    libgbm1 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure Git for container use
@@ -36,6 +42,10 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright browsers and dependencies
+RUN playwright install-deps chromium
+RUN playwright install chromium
 
 # Copy application code
 COPY . .

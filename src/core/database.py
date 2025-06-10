@@ -1,5 +1,5 @@
 """
-Database layer for SNARF - extracted and refactored from utils.py
+Database layer for smurf - extracted and refactored from utils.py
 Provides unified interface for all source processors
 """
 import os

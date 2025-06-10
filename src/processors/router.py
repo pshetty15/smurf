@@ -1,5 +1,5 @@
 """
-Processor router for SNARF.
+Processor router for smurf.
 Routes URLs to appropriate processors and manages processing workflow.
 """
 from typing import List, Dict, Any, Optional

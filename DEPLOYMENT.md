@@ -1,8 +1,8 @@
-# SMURF Deployment Guide
+# smurf Deployment Guide
 
 ## 🚀 Complete Deployment Steps
 
-### 1. Rename Project to SMURF
+### 1. Rename Project to smurf
 
 ```bash
 # Run the renaming script
@@ -13,8 +13,8 @@ docker-compose down -v
 
 # Rename the directory
 cd ..
-mv snarf snurf
-cd snurf
+mv snarf smurf
+cd smurf
 ```
 
 ### 2. Pre-Deployment Setup
@@ -45,7 +45,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
 
-  snurf-mcp:
+  smurf-mcp:
     restart: always
     deploy:
       resources:
@@ -53,7 +53,7 @@ services:
           memory: 2G
           cpus: '1.0'
 
-  snurf-api:
+  smurf-api:
     restart: always
     deploy:
       resources:
@@ -75,8 +75,8 @@ services:
 ### Steps
 ```bash
 # 1. Clone repository to server
-git clone https://github.com/your-repo/snurf.git
-cd snurf
+git clone https://github.com/your-repo/smurf.git
+cd smurf
 
 # 2. Set up environment
 cp .env.example .env
@@ -101,8 +101,8 @@ sudo apt install docker.io docker-compose
 sudo usermod -aG docker $USER
 
 # 3. Clone and deploy
-git clone https://github.com/your-repo/snurf.git
-cd snurf
+git clone https://github.com/your-repo/smurf.git
+cd smurf
 ./deploy-aws.sh
 ```
 
@@ -112,7 +112,7 @@ cd snurf
 docker swarm init
 
 # Deploy stack
-docker stack deploy -c docker-compose.yml -c docker-compose.prod.yml snurf
+docker stack deploy -c docker-compose.yml -c docker-compose.prod.yml smurf
 ```
 
 ## Option C: Kubernetes Deployment
@@ -122,20 +122,20 @@ Create `k8s-deployment.yaml`:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: snurf-mcp
+  name: smurf-mcp
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: snurf-mcp
+      app: smurf-mcp
   template:
     metadata:
       labels:
-        app: snurf-mcp
+        app: smurf-mcp
     spec:
       containers:
-      - name: snurf-mcp
-        image: snurf:latest
+      - name: smurf-mcp
+        image: smurf:latest
         command: ["python", "/app/src/mcp_server_standalone.py"]
         env:
         - name: POSTGRES_HOST
@@ -143,16 +143,16 @@ spec:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: snurf-secrets
+              name: smurf-secrets
               key: openai-api-key
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: snurf-mcp-service
+  name: smurf-mcp-service
 spec:
   selector:
-    app: snurf-mcp
+    app: smurf-mcp
   ports:
   - port: 8000
     targetPort: 8000
@@ -161,7 +161,7 @@ spec:
 Deploy to Kubernetes:
 ```bash
 # Create secrets
-kubectl create secret generic snurf-secrets --from-literal=openai-api-key=$OPENAI_API_KEY
+kubectl create secret generic smurf-secrets --from-literal=openai-api-key=$OPENAI_API_KEY
 
 # Deploy
 kubectl apply -f k8s-deployment.yaml
@@ -191,10 +191,10 @@ CMD ["lambda_handler.handler"]
 ```nginx
 server {
     listen 443 ssl;
-    server_name snurf.yourdomain.com;
+    server_name smurf.yourdomain.com;
     
-    ssl_certificate /etc/ssl/certs/snurf.crt;
-    ssl_certificate_key /etc/ssl/private/snurf.key;
+    ssl_certificate /etc/ssl/certs/smurf.crt;
+    ssl_certificate_key /etc/ssl/private/smurf.key;
     
     location / {
         proxy_pass http://localhost:8080;
@@ -232,17 +232,17 @@ docker-compose -f monitoring/docker-compose.monitoring.yml up -d
 
 ```bash
 # Database backup script
-cat > backup-snurf.sh << 'EOF'
+cat > backup-smurf.sh << 'EOF'
 #!/bin/bash
 DATE=$(date +%Y%m%d-%H%M%S)
-docker-compose exec -T postgres pg_dump -U snurf_user snurf_db > backups/snurf-$DATE.sql
+docker-compose exec -T postgres pg_dump -U smurf_user smurf_db > backups/smurf-$DATE.sql
 # Keep last 7 days
-find backups -name "snurf-*.sql" -mtime +7 -delete
+find backups -name "smurf-*.sql" -mtime +7 -delete
 EOF
 
 # Add to crontab
 crontab -e
-# Add: 0 2 * * * /path/to/backup-snurf.sh
+# Add: 0 2 * * * /path/to/backup-smurf.sh
 ```
 
 ### 7. Scaling Considerations
@@ -269,8 +269,8 @@ git pull
 docker-compose build
 
 # 3. Rolling update
-docker-compose up -d --no-deps --scale snurf-mcp=2
-docker-compose up -d --no-deps snurf-mcp
+docker-compose up -d --no-deps --scale smurf-mcp=2
+docker-compose up -d --no-deps smurf-mcp
 ```
 
 #### Health Monitoring
@@ -279,7 +279,7 @@ docker-compose up -d --no-deps snurf-mcp
 curl http://localhost:8080/health
 
 # View logs
-docker-compose logs -f snurf-mcp
+docker-compose logs -f smurf-mcp
 
 # Database status
 docker-compose exec postgres pg_isready
@@ -297,7 +297,7 @@ docker-compose exec postgres pg_isready
 ### 10. Troubleshooting
 
 #### Common Issues
-1. **MCP not responding**: Check logs with `docker-compose logs snurf-mcp`
+1. **MCP not responding**: Check logs with `docker-compose logs smurf-mcp`
 2. **Database connection failed**: Verify credentials and network
 3. **Out of memory**: Increase Docker memory limits
 4. **Slow performance**: Check embedding generation and database indexes
@@ -305,17 +305,17 @@ docker-compose exec postgres pg_isready
 #### Debug Mode
 ```bash
 # Enable debug logging
-LOG_LEVEL=DEBUG docker-compose up snurf-mcp
+LOG_LEVEL=DEBUG docker-compose up smurf-mcp
 ```
 
 ## 🚢 Quick Deploy Script
 
-Save as `deploy-snurf.sh`:
+Save as `deploy-smurf.sh`:
 ```bash
 #!/bin/bash
 set -e
 
-echo "🚀 Deploying SNURF..."
+echo "🚀 Deploying smurf..."
 
 # Check prerequisites
 command -v docker >/dev/null 2>&1 || { echo "Docker required"; exit 1; }
@@ -333,9 +333,9 @@ sleep 10
 
 # Verify
 if curl -s http://localhost:8080/health | grep -q "healthy"; then
-    echo "✅ SNURF deployed successfully!"
+    echo "✅ smurf deployed successfully!"
     echo "🌐 API: http://localhost:8080"
-    echo "🔌 MCP: docker compose exec -T snurf-mcp python /app/src/mcp_server_standalone.py"
+    echo "🔌 MCP: docker compose exec -T smurf-mcp python /app/src/mcp_server_standalone.py"
 else
     echo "❌ Deployment failed. Check logs: docker-compose logs"
 fi

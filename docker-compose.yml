@@ -33,9 +33,12 @@ services:
       POSTGRES_USER: smurf_user
       POSTGRES_PASSWORD: smurf_password
       
-      # OpenAI configuration (set these in .env file)
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      MODEL_CHOICE: ${MODEL_CHOICE:-gpt-4o-mini}
+      # AWS Bedrock configuration (set these in .env file)
+      AWS_PROFILE: ${AWS_PROFILE:-cu_eng_qe_func_daily}
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      BEDROCK_ENDPOINT_URL: ${BEDROCK_ENDPOINT_URL:-https://bedrock-runtime.us-west-2.amazonaws.com}
+      BEDROCK_EMBEDDING_MODEL: ${BEDROCK_EMBEDDING_MODEL:-amazon.titan-embed-text-v1}
+      BEDROCK_TEXT_MODEL: ${BEDROCK_TEXT_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
       
       # Feature flags
       USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
@@ -46,8 +49,8 @@ services:
       MAX_CONCURRENT_CRAWLS: ${MAX_CONCURRENT_CRAWLS:-5}
       MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
       
-      # Git configuration
-      GIT_USER_NAME: "SMURF Bot"
+      # Git configuration for GitHub processor
+      GIT_USER_NAME: "smurf Bot"
       GIT_USER_EMAIL: "smurf@localhost"
     ports:
       - "8000:8000"
@@ -58,6 +61,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - repos_cache:/app/data/repos
+      - ~/.aws:/root/.aws:ro
     networks:
       - smurf-network
     restart: unless-stopped
@@ -76,7 +80,7 @@ services:
   smurf-mcp:
     build: .
     container_name: smurf-mcp
-    command: ["python", "/app/src/mcp_server_standalone.py"]
+    command: ["python", "-m", "src.mcp_server_standalone"]
     environment:
       # Database configuration
       POSTGRES_HOST: postgres
@@ -85,9 +89,12 @@ services:
       POSTGRES_USER: smurf_user
       POSTGRES_PASSWORD: smurf_password
       
-      # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      MODEL_CHOICE: ${MODEL_CHOICE:-gpt-4o-mini}
+      # AWS Bedrock configuration
+      AWS_PROFILE: ${AWS_PROFILE:-cu_eng_qe_func_daily}
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      BEDROCK_ENDPOINT_URL: ${BEDROCK_ENDPOINT_URL:-https://bedrock-runtime.us-west-2.amazonaws.com}
+      BEDROCK_EMBEDDING_MODEL: ${BEDROCK_EMBEDDING_MODEL:-amazon.titan-embed-text-v1}
+      BEDROCK_TEXT_MODEL: ${BEDROCK_TEXT_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
       
       # Feature flags
       USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
@@ -96,6 +103,7 @@ services:
       # Application settings
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,11 +111,56 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - repos_cache:/app/data/repos
+      - ~/.aws:/root/.aws:ro
     networks:
       - smurf-network
     restart: unless-stopped
     stdin_open: true
     tty: true
+
+  smurf-mcp-http:
+    build: .
+    container_name: smurf-mcp-http
+    command: ["python", "-m", "src.mcp_server_http"]
+    environment:
+      # Database configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: smurf_db
+      POSTGRES_USER: smurf_user
+      POSTGRES_PASSWORD: smurf_password
+      
+      # AWS Bedrock configuration
+      AWS_PROFILE: ${AWS_PROFILE:-cu_eng_qe_func_daily}
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      BEDROCK_ENDPOINT_URL: ${BEDROCK_ENDPOINT_URL:-https://bedrock-runtime.us-west-2.amazonaws.com}
+      BEDROCK_EMBEDDING_MODEL: ${BEDROCK_EMBEDDING_MODEL:-amazon.titan-embed-text-v1}
+      BEDROCK_TEXT_MODEL: ${BEDROCK_TEXT_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
+      
+      # Feature flags
+      USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
+      USE_AGENTIC_RAG: ${USE_AGENTIC_RAG:-false}
+      
+      # MCP server settings
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8090
+      
+      # Application settings
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - repos_cache:/app/data/repos
+      - ~/.aws:/root/.aws:ro
+    networks:
+      - smurf-network
+    restart: unless-stopped
 
   smurf-api:
     build: .
@@ -129,9 +182,12 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
       
-      # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      MODEL_CHOICE: ${MODEL_CHOICE:-gpt-4o-mini}
+      # AWS Bedrock configuration
+      AWS_PROFILE: ${AWS_PROFILE:-cu_eng_qe_func_daily}
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      BEDROCK_ENDPOINT_URL: ${BEDROCK_ENDPOINT_URL:-https://bedrock-runtime.us-west-2.amazonaws.com}
+      BEDROCK_EMBEDDING_MODEL: ${BEDROCK_EMBEDDING_MODEL:-amazon.titan-embed-text-v1}
+      BEDROCK_TEXT_MODEL: ${BEDROCK_TEXT_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
       
       # Feature flags
       USE_CONTEXTUAL_EMBEDDINGS: ${USE_CONTEXTUAL_EMBEDDINGS:-true}
@@ -147,6 +203,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - repos_cache:/app/data/repos
+      - ~/.aws:/root/.aws:ro
     networks:
       - smurf-network
     restart: unless-stopped

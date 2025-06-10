@@ -1,5 +1,5 @@
 """
-Git utilities for SNARF GitHub processor.
+Git utilities for smurf GitHub processor.
 Handles repository cloning, file analysis, and code structure extraction.
 """
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class GitRepository:
-    """Manages Git repository operations for SNARF."""
+    """Manages Git repository operations for smurf."""
     
     def __init__(self, repo_url: str, cache_dir: str = None):
         """

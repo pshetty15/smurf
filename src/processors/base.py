@@ -1,5 +1,5 @@
 """
-Base processor interface for SNARF.
+Base processor interface for smurf.
 All source processors inherit from this base class.
 """
 from abc import ABC, abstractmethod

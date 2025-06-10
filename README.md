@@ -1,6 +1,6 @@
-# SMURF - Semantic Multi-source Unified Retrieval Framework
+# smurf - semantic multi-source unified retrieval framework
 
-A containerized RAG (Retrieval-Augmented Generation) system that intelligently processes and indexes content from multiple sources. SMURF provides semantic search capabilities across web pages, GitHub repositories, and other sources using vector embeddings.
+A containerized RAG (Retrieval-Augmented Generation) system that intelligently processes and indexes content from multiple sources. smurf provides semantic search capabilities across web pages, GitHub repositories, and other sources using vector embeddings.
 
 ## 🚀 Quick Start - Local Docker Setup
 
@@ -13,7 +13,7 @@ A containerized RAG (Retrieval-Augmented Generation) system that intelligently p
 ### 1. Clone the Repository
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/your-repo/smurf.git
 cd smurf
 
 # Verify Docker is running
@@ -38,7 +38,7 @@ OPENAI_API_KEY=sk-...your-key-here...
 # USE_CONTEXTUAL_EMBEDDINGS=true (enhances search quality)
 ```
 
-### 3. Start SMURF Services
+### 3. Start smurf Services
 ```bash
 # Build and start all services in detached mode
 docker-compose up -d --build
@@ -46,8 +46,8 @@ docker-compose up -d --build
 # This will start:
 # - PostgreSQL with pgvector extension (port 5432)
 # - Redis cache (port 6379)
-# - SMURF API server (port 8080)
-# - SMURF application container
+# - smurf API server (port 8080)
+# - smurf application container
 
 # Check if services are running
 docker-compose ps
@@ -67,8 +67,8 @@ curl http://localhost:8080/health
 # Expected response: {"status": "healthy", "database": "connected"}
 ```
 
-### 5. Access SMURF
-- **REST API**: http://localhost:8080
+### 5. Access smurf
+- **REST API**: http://localhost:8080/docs
 - **Interactive CLI**: `docker-compose exec smurf-app python main.py`
 - **PostgreSQL Database**: 
   - Host: localhost
@@ -80,10 +80,10 @@ curl http://localhost:8080/health
 ## 🏗️ Architecture
 
 ### Services
-- **postgres**: PostgreSQL with pgvector extension
+- **smurf-postgres**: PostgreSQL with pgvector extension
+- **smurf-redis**: Redis for caching and session management
 - **smurf-app**: Main application (interactive mode)
 - **smurf-api**: REST API server  
-- **redis**: Caching layer
 
 ### Components
 - **Database Layer**: Unified PostgreSQL interface with vector embeddings
@@ -132,19 +132,41 @@ curl -X POST "http://localhost:8080/batch-crawl" \
   }'
 ```
 
-## 🎮 Interactive Mode
+## 📝 Interactive Mode
+
+### Interactive Mode Examples
 
 ```bash
-# Enter interactive mode
+# Start interactive session
 docker-compose exec smurf-app python main.py
 
-# Available commands:
+# Example commands:
 smurf> smurf https://docs.python.org/3/tutorial/
 smurf> smurf https://github.com/fastapi/fastapi
 smurf> search "python functions"
 smurf> search "FastAPI dependency injection"
 smurf> sources
 smurf> quit
+```
+
+### API Examples
+
+```bash
+# Index a URL
+curl -X POST "http://localhost:8080/process" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://docs.python.org/3/tutorial/"}'
+
+# Search indexed content
+curl -X POST "http://localhost:8080/search" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "python functions", "limit": 5}'
+
+# List all sources
+curl "http://localhost:8080/sources"
+
+# Health check
+curl "http://localhost:8080/health"
 ```
 
 ## 🔧 Configuration
@@ -161,6 +183,29 @@ USE_AGENTIC_RAG=false
 LOG_LEVEL=INFO
 MAX_CONCURRENT_CRAWLS=5
 MAX_FILE_SIZE=1048576
+
+# AWS Bedrock Configuration
+AWS_PROFILE=your-profile
+AWS_REGION=us-west-2
+BEDROCK_ENDPOINT_URL=https://bedrock-runtime.us-west-2.amazonaws.com
+
+# Database Configuration  
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=smurf_db
+POSTGRES_USER=smurf_user
+POSTGRES_PASSWORD=smurf_password
+
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8080
+
+# Application Mode
+SMURF_MODE=interactive  # or "demo"
+
+# Embedding Configuration
+BEDROCK_EMBEDDING_MODEL=amazon.titan-embed-text-v1
+BEDROCK_TEXT_MODEL=anthropic.claude-3-haiku-20240307-v1:0
 ```
 
 ### Feature Flags

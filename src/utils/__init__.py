@@ -1,1 +1,1 @@
-# Utils package for SNARF
+# Utils package for smurf

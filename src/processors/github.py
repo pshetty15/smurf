@@ -1,5 +1,5 @@
 """
-GitHub processor for SNARF.
+GitHub processor for smurf.
 Handles GitHub repository cloning, analysis, and code structure extraction.
 """
 

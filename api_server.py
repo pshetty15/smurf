@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-SNARF API Server
-FastAPI-based REST API for the SNARF RAG system
+smurf API Server
+FastAPI-based REST API for the smurf RAG system
 """
 
 import os
 import asyncio
 import logging
+import sys
 from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 import uvicorn
 from dotenv import load_dotenv
 
@@ -29,7 +30,11 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('/app/logs/api.log') if os.path.exists('/app/logs') else logging.NullHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -78,7 +83,7 @@ class HealthResponse(BaseModel):
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     # Startup
-    logger.info("🚀 Starting SNARF API server...")
+    logger.info("🚀 Starting smurf API server...")
     
     try:
         # Initialize database
@@ -93,16 +98,16 @@ async def lifespan(app: FastAPI):
         app_state['router'] = ProcessorRouter([github_processor, web_processor], web_processor)
         
         app_state['initialized'] = True
-        logger.info("✅ SNARF API server ready!")
+        logger.info("✅ smurf API server ready!")
         
     except Exception as e:
-        logger.error(f"❌ Failed to initialize SNARF API: {e}")
+        logger.error(f"❌ Failed to initialize smurf API: {e}")
         raise
     
     yield
     
     # Shutdown
-    logger.info("🧹 Shutting down SNARF API server...")
+    logger.info("🧹 Shutting down smurf API server...")
     
     if app_state['router']:
         for processor in app_state['router'].processors:
@@ -112,13 +117,13 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logger.error(f"Error cleaning up processor: {e}")
     
-    logger.info("👋 SNARF API server shutdown complete")
+    logger.info("👋 smurf API server shutdown complete")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="SNARF API",
-    description="Smart Neural AI Retrieval Framework - RAG System API",
+    title="smurf API",
+    description="API for the smurf RAG system - crawl, index, and search content",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -136,7 +141,7 @@ app.add_middleware(
 # Dependency to check initialization
 def check_initialized():
     if not app_state['initialized']:
-        raise HTTPException(status_code=503, detail="SNARF is not initialized")
+        raise HTTPException(status_code=503, detail="smurf is not initialized")
     return app_state
 
 
@@ -175,7 +180,7 @@ async def health_check():
 async def crawl_url(
     request: CrawlRequest,
     background_tasks: BackgroundTasks,
-    state = check_initialized()
+    state: dict = Depends(check_initialized)
 ):
     """Crawl and process a URL."""
     try:
@@ -204,7 +209,7 @@ async def crawl_url(
 @app.post("/search", response_model=SearchResponse)
 async def search_documents(
     request: SearchRequest,
-    state = check_initialized()
+    state: dict = Depends(check_initialized)
 ):
     """Search the knowledge base."""
     try:
@@ -232,7 +237,7 @@ async def search_documents_get(
     q: str = Query(..., description="Search query"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of results"),
     source: Optional[str] = Query(None, description="Filter by source"),
-    state = check_initialized()
+    state: dict = Depends(check_initialized)
 ):
     """Search the knowledge base via GET request."""
     try:
@@ -244,7 +249,7 @@ async def search_documents_get(
 
 
 @app.get("/sources", response_model=SourcesResponse)
-async def get_sources(state = check_initialized()):
+async def get_sources(state: dict = Depends(check_initialized)):
     """Get all available sources."""
     try:
         sources = state['db'].get_all_sources()
@@ -255,7 +260,7 @@ async def get_sources(state = check_initialized()):
 
 
 @app.get("/stats")
-async def get_stats(state = check_initialized()):
+async def get_stats(state: dict = Depends(check_initialized)):
     """Get router and system statistics."""
     try:
         router_stats = state['router'].get_stats()
@@ -272,7 +277,7 @@ async def get_stats(state = check_initialized()):
 
 
 @app.delete("/sources/{source_id}")
-async def delete_source(source_id: str, state = check_initialized()):
+async def delete_source(source_id: str, state: dict = Depends(check_initialized)):
     """Delete a source and all its documents."""
     try:
         # This would need to be implemented in the database class
@@ -289,7 +294,7 @@ async def batch_crawl(
     background_tasks: BackgroundTasks,
     smart_crawl: bool = False,
     depth: int = 1,
-    state = check_initialized()
+    state: dict = Depends(check_initialized)
 ):
     """Crawl multiple URLs in batch."""
     try:
@@ -348,7 +353,7 @@ def main():
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
     
-    logger.info(f"🌐 Starting SNARF API server on {host}:{port}")
+    logger.info(f"🌐 Starting smurf API server on {host}:{port}")
     
     uvicorn.run(
         "api_server:app",
