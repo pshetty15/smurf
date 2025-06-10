@@ -27,8 +27,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure Git for container use
-RUN git config --global user.name "SNARF Bot" && \
-    git config --global user.email "snarf@localhost" && \
+RUN git config --global user.name "smurf Bot" && \
+    git config --global user.email "smurf@localhost" && \
     git config --global init.defaultBranch main && \
     git config --global safe.directory '*'
 
