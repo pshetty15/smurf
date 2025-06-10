@@ -26,6 +26,14 @@ services:
     build: .
     container_name: smurf-application
     environment:
+      # Embedding Provider
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-bedrock}
+
+      # OpenAI Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_MODEL_CHOICE: ${OPENAI_MODEL_CHOICE:-gpt-4o-mini}
+
       # Database configuration
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -82,6 +90,14 @@ services:
     container_name: smurf-mcp
     command: ["python", "-m", "src.mcp_server_standalone"]
     environment:
+      # Embedding Provider
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-bedrock}
+
+      # OpenAI Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_MODEL_CHOICE: ${OPENAI_MODEL_CHOICE:-gpt-4o-mini}
+
       # Database configuration
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -123,6 +139,14 @@ services:
     container_name: smurf-mcp-http
     command: ["python", "-m", "src.mcp_server_http"]
     environment:
+      # Embedding Provider
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-bedrock}
+
+      # OpenAI Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_MODEL_CHOICE: ${OPENAI_MODEL_CHOICE:-gpt-4o-mini}
+
       # Database configuration
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -167,6 +191,14 @@ services:
     container_name: smurf-api
     command: ["python", "api_server.py"]
     environment:
+      # Embedding Provider
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-bedrock}
+
+      # OpenAI Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_MODEL_CHOICE: ${OPENAI_MODEL_CHOICE:-gpt-4o-mini}
+
       # Database configuration
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432

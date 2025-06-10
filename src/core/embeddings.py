@@ -1,11 +1,13 @@
 """
 Embedding utilities - extracted from utils.py
-Handles Amazon Bedrock embeddings and contextual enrichment
+Handles Amazon Bedrock and OpenAI embeddings and contextual enrichment
 """
 import os
 import boto3
 import json
 import time
+import openai
+import numpy as np
 from typing import List, Tuple
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -13,500 +15,266 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# --- Client Initialization ---
 
-# Initialize Bedrock client
+def get_embedding_provider():
+    """Gets the configured embedding provider."""
+    return os.getenv("EMBEDDING_PROVIDER", "bedrock").lower()
+
 def get_bedrock_client():
     """Initialize and return Bedrock client with proper configuration."""
-    region = os.getenv("AWS_REGION")
-    profile_name = os.getenv("AWS_PROFILE")
-    endpoint_url = os.getenv("BEDROCK_ENDPOINT_URL")
+    provider = get_embedding_provider()
     
-    # Validate required environment variables
-    if not region:
-        raise ValueError("AWS_REGION environment variable is required")
-    if not profile_name:
-        raise ValueError("AWS_PROFILE environment variable is required")
-    if not endpoint_url:
-        raise ValueError("BEDROCK_ENDPOINT_URL environment variable is required")
-    
-    # Create session with profile from ~/.aws/credentials
-    session = boto3.Session(
-        profile_name=profile_name,
-        region_name=region
-    )
-    
-    return session.client('bedrock-runtime', 
-                         region_name=region,
-                         endpoint_url=endpoint_url)
+    # Only require Bedrock-specific variables if it's the selected provider
+    if provider == "bedrock":
+        endpoint_url = os.getenv("BEDROCK_ENDPOINT_URL")
+        aws_region = os.getenv("AWS_REGION_NAME", "us-west-2")
+        aws_profile = os.getenv("AWS_PROFILE")
 
+        if not endpoint_url:
+            raise ValueError("BEDROCK_ENDPOINT_URL environment variable is required for Bedrock provider")
+        if not aws_profile:
+            raise ValueError("AWS_PROFILE environment variable is required for Bedrock provider")
+            
+        session = boto3.Session(profile_name=aws_profile)
+        return session.client('bedrock-runtime', aws_region, endpoint_url=endpoint_url)
+    return None
 
-def create_embeddings_batch(texts: List[str]) -> List[List[float]]:
+def get_openai_client():
+    """Initialize and return OpenAI client."""
+    provider = get_embedding_provider()
+    if provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI provider")
+        return openai.OpenAI(api_key=api_key)
+    return None
+
+# --- Unified Embedding Generation ---
+
+def create_embeddings(texts: List[str]) -> List[List[float]]:
     """
-    Create embeddings for multiple texts using Amazon Bedrock.
-    
-    Args:
-        texts: List of texts to create embeddings for
-        
-    Returns:
-        List of embeddings (each embedding is a list of floats)
+    Create embeddings for a list of texts using the configured provider.
     """
-    if not texts:
-        return []
+    provider = get_embedding_provider()
     
-    # Get embedding model from environment or use default
-    embedding_model = os.getenv("BEDROCK_EMBEDDING_MODEL")
-    if not embedding_model:
-        raise ValueError("BEDROCK_EMBEDDING_MODEL environment variable is required")
-    
-    bedrock_client = get_bedrock_client()
-    
-    max_retries = 3
-    retry_delay = 1.0  # Start with 1 second delay
-    
-    embeddings = []
-    
-    for retry in range(max_retries):
-        try:
-            # Bedrock typically processes embeddings one at a time
-            # For batch processing, we'll iterate through texts
-            batch_embeddings = []
-            successful_count = 0
-            
-            for i, text in enumerate(texts):
-                try:
-                    # Prepare the request body based on the model
-                    if "titan" in embedding_model.lower():
-                        body = json.dumps({
-                            "inputText": text
-                        })
-                    elif "cohere" in embedding_model.lower():
-                        body = json.dumps({
-                            "texts": [text],
-                            "input_type": "search_document"
-                        })
-                    else:
-                        # Default to Titan format
-                        body = json.dumps({
-                            "inputText": text
-                        })
-                    
-                    # Make the API call
-                    response = bedrock_client.invoke_model(
-                        modelId=embedding_model,
-                        body=body,
-                        contentType='application/json',
-                        accept='application/json'
-                    )
-                    
-                    # Parse response based on model
-                    response_body = json.loads(response['body'].read())
-                    
-                    if "titan" in embedding_model.lower():
-                        embedding = response_body['embedding']
-                    elif "cohere" in embedding_model.lower():
-                        embedding = response_body['embeddings'][0]
-                    else:
-                        # Try to extract embedding from common response formats
-                        if 'embedding' in response_body:
-                            embedding = response_body['embedding']
-                        elif 'embeddings' in response_body:
-                            embedding = response_body['embeddings'][0]
-                        else:
-                            raise ValueError(f"Unknown response format for model {embedding_model}")
-                    
-                    batch_embeddings.append(embedding)
-                    successful_count += 1
-                    
-                    # Add small delay between requests to avoid rate limiting
-                    if i < len(texts) - 1:
-                        time.sleep(0.1)
-                        
-                except ClientError as e:
-                    error_code = e.response['Error']['Code']
-                    if error_code == 'ThrottlingException':
-                        # If throttled, wait longer and retry
-                        if retry < max_retries - 1:
-                            print(f"Throttling detected for text {i}, retrying in {retry_delay} seconds...")
-                            time.sleep(retry_delay)
-                            retry_delay *= 2
-                            continue
-                    print(f"AWS Bedrock error for text {i}: {e}")
-                    # Add zero embedding as fallback (adjust size based on your model)
-                    embedding_size = 1536 if "titan" in embedding_model.lower() else 1024
-                    batch_embeddings.append([0.0] * embedding_size)
-                except Exception as e:
-                    print(f"Error creating embedding for text {i}: {e}")
-                    # Add zero embedding as fallback
-                    embedding_size = 1536 if "titan" in embedding_model.lower() else 1024
-                    batch_embeddings.append([0.0] * embedding_size)
-            
-            print(f"Successfully created {successful_count}/{len(texts)} embeddings via Bedrock")
-            return batch_embeddings
-            
-        except Exception as e:
-            if retry < max_retries - 1:
-                print(f"Error creating batch embeddings (attempt {retry + 1}/{max_retries}): {e}")
-                print(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                retry_delay *= 2
-            else:
-                print(f"Failed to create batch embeddings after {max_retries} attempts: {e}")
-                # Return zero embeddings as final fallback
-                embedding_size = 1536 if "titan" in embedding_model.lower() else 1024
-                return [[0.0] * embedding_size for _ in texts]
-
+    if provider == "openai":
+        return create_embeddings_openai(texts)
+    elif provider == "bedrock":
+        return create_embeddings_bedrock(texts)
+    else:
+        raise ValueError(f"Unsupported embedding provider: {provider}. Use 'openai' or 'bedrock'.")
 
 def create_embedding(text: str) -> List[float]:
     """
-    Create an embedding for a single text using Amazon Bedrock.
-    
-    Args:
-        text: Text to create an embedding for
-        
-    Returns:
-        List of floats representing the embedding
+    Create an embedding for a single text using the configured provider.
     """
+    if not text:
+        return []
+    embeddings = create_embeddings([text])
+    return embeddings[0] if embeddings else []
+
+# --- Provider-Specific Embedding Implementations ---
+
+def create_embeddings_bedrock(texts: List[str]) -> List[List[float]]:
+    """Create embeddings for multiple texts using Amazon Bedrock."""
+    if not texts:
+        return []
+        
+    embedding_model = os.getenv("BEDROCK_EMBEDDING_MODEL")
+    if not embedding_model:
+        raise ValueError("BEDROCK_EMBEDDING_MODEL environment variable is required for Bedrock provider")
+
+    bedrock_client = get_bedrock_client()
+    if not bedrock_client:
+        print("Bedrock client not initialized.")
+        return [[] for _ in texts]
+
+    embeddings = []
+    for i, text in enumerate(texts):
+        try:
+            body = json.dumps({"inputText": text})
+            response = bedrock_client.invoke_model(
+                body=body,
+                modelId=embedding_model,
+                accept="application/json",
+                contentType="application/json"
+            )
+            response_body = json.loads(response.get("body").read())
+            embeddings.append(response_body.get("embedding"))
+        except (ClientError, Exception) as e:
+            print(f"AWS Bedrock error for text {i}: {e}")
+            embeddings.append([])
+
+    successful_count = sum(1 for emb in embeddings if emb)
+    print(f"Successfully created {successful_count}/{len(texts)} embeddings via Bedrock")
+    return embeddings
+
+def create_embeddings_openai(texts: List[str]) -> List[List[float]]:
+    """Create embeddings for multiple texts using OpenAI."""
+    if not texts:
+        return []
+
+    openai_client = get_openai_client()
+    if not openai_client:
+        print("OpenAI client not initialized.")
+        return [[] for _ in texts]
+
+    embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    
     try:
-        embeddings = create_embeddings_batch([text])
-        return embeddings[0] if embeddings else [0.0] * 1536
+        response = openai_client.embeddings.create(input=texts, model=embedding_model)
+        embeddings = [item.embedding for item in response.data]
+        print(f"Successfully created {len(embeddings)} embeddings via OpenAI")
+        return embeddings
     except Exception as e:
-        print(f"Error creating embedding: {e}")
-        # Return empty embedding if there's an error
-        embedding_model = os.getenv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v1")
-        embedding_size = 1536 if "titan" in embedding_model.lower() else 1024
-        return [0.0] * embedding_size
+        print(f"OpenAI API error: {e}")
+        return [[] for _ in texts]
 
 
-def generate_contextual_embedding(full_document: str, chunk: str) -> Tuple[str, bool]:
-    """
-    Generate contextual information for a chunk within a document to improve retrieval.
-    Uses Amazon Bedrock for text generation.
-    
-    Args:
-        full_document: The complete document text
-        chunk: The specific chunk of text to generate context for
-        
-    Returns:
-        Tuple containing:
-        - The contextual text that situates the chunk within the document
-        - Boolean indicating if contextual embedding was performed
-    """
-    # Get the text generation model from environment
+# --- Unified Text Generation ---
+
+def generate_text(prompt: str, max_tokens: int = 2048) -> str:
+    """Generate text using the configured provider."""
+    # NOTE: We are using the embedding provider for now.
+    # A separate TEXT_PROVIDER could be added for more flexibility.
+    provider = get_embedding_provider()
+
+    if provider == "openai":
+        return generate_text_openai(prompt, max_tokens)
+    elif provider == "bedrock":
+        return generate_text_bedrock(prompt, max_tokens)
+    else:
+        raise ValueError(f"Unsupported text generation provider: {provider}")
+
+# --- Provider-Specific Text Generation ---
+
+def generate_text_bedrock(prompt: str, max_tokens: int = 2048) -> str:
+    """Uses Amazon Bedrock for text generation."""
     text_model = os.getenv("BEDROCK_TEXT_MODEL")
     if not text_model:
-        raise ValueError("BEDROCK_TEXT_MODEL environment variable is required")
-    
+        raise ValueError("BEDROCK_TEXT_MODEL is required for Bedrock provider")
+        
     bedrock_client = get_bedrock_client()
+    if not bedrock_client:
+        print("Bedrock client not initialized.")
+        return ""
+        
+    try:
+        # Dynamic payload based on model provider (e.g., Anthropic, Cohere)
+        if "anthropic" in text_model:
+            payload = {
+                "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
+                "max_tokens_to_sample": max_tokens,
+                "temperature": 0.1,
+                "top_p": 0.9,
+                "anthropic_version": "bedrock-2023-05-31"
+            }
+        else: # Default or other models like Cohere
+            payload = {
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": 0.1,
+            }
+
+        response = bedrock_client.invoke_model(
+            body=json.dumps(payload),
+            modelId=text_model,
+            accept="application/json",
+            contentType="application/json"
+        )
+        response_body = json.loads(response['body'].read())
+
+        if "anthropic" in text_model:
+            return response_body.get('completion', '').strip()
+        elif "cohere" in text_model:
+            return response_body['generations'][0]['text'].strip()
+        else: # Fallback for other models
+            return response_body.get('results', [{}])[0].get('outputText', '').strip()
+
+    except (ClientError, Exception) as e:
+        print(f"Error generating text with Bedrock: {e}")
+        return ""
+
+
+def generate_text_openai(prompt: str, max_tokens: int = 2048) -> str:
+    """Uses OpenAI for text generation."""
+    openai_client = get_openai_client()
+    if not openai_client:
+        print("OpenAI client not initialized.")
+        return ""
+        
+    try:
+        model = os.getenv("OPENAI_MODEL_CHOICE", "gpt-4o-mini")
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.1,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error generating text with OpenAI: {e}")
+        return ""
+
+# --- Helper Functions using Text Generation ---
+
+def get_contextual_embedding(chunk: str) -> str:
+    """Enhances a text chunk with a generated contextual summary."""
+    if not os.getenv("USE_CONTEXTUAL_EMBEDDINGS") == "true":
+        return chunk
     
     try:
-        # Create the prompt for generating contextual information
-        prompt = f"""<document> 
-{full_document[:25000]} 
-</document>
-Here is the chunk we want to situate within the whole document 
-<chunk> 
-{chunk}
-</chunk> 
-Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else."""
+        prompt = f"""
+        Human: Analyze the following text chunk and provide a concise, one-sentence summary of its core topic.
+        This summary will be used to improve search recall for semantic search.
+        Focus on the main subject and key actions or concepts.
 
-        # Prepare request body based on model family
-        if "claude" in text_model.lower():
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 200,
-                "temperature": 0.3,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            })
-        elif "titan" in text_model.lower():
-            body = json.dumps({
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": 200,
-                    "temperature": 0.3
-                }
-            })
-        else:
-            # Default to Claude format
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 200,
-                "temperature": 0.3,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            })
+        Text chunk:
+        "{chunk}"
 
-        # Call Bedrock for text generation
-        response = bedrock_client.invoke_model(
-            modelId=text_model,
-            body=body,
-            contentType='application/json',
-            accept='application/json'
-        )
-        
-        # Parse response based on model
-        response_body = json.loads(response['body'].read())
-        
-        if "claude" in text_model.lower():
-            context = response_body['content'][0]['text'].strip()
-        elif "titan" in text_model.lower():
-            context = response_body['results'][0]['outputText'].strip()
-        else:
-            # Try to extract text from common response formats
-            if 'content' in response_body and len(response_body['content']) > 0:
-                context = response_body['content'][0]['text'].strip()
-            elif 'results' in response_body and len(response_body['results']) > 0:
-                context = response_body['results'][0]['outputText'].strip()
-            else:
-                raise ValueError(f"Unknown response format for model {text_model}")
-        
-        # Combine the context with the original chunk
-        contextual_text = f"{context}\n---\n{chunk}"
-        
-        return contextual_text, True
-    
+        Assistant:
+        """
+        context = generate_text(prompt)
+        return f"{chunk}\n\nContext: {context}"
     except Exception as e:
-        print(f"Error generating contextual embedding with Bedrock: {e}. Using original chunk instead.")
-        return chunk, False
+        print(f"Error generating contextual embedding: {e}. Using original chunk instead.")
+        return chunk
 
+def summarize_code_example(code_snippet: str, file_path: str) -> str:
+    """Generates a summary for a code snippet."""
+    prompt = f"""
+    Human: You are an expert code analyst. Summarize the following code snippet from the file '{file_path}'.
+    Focus on its primary function, inputs, and outputs in a concise, one-sentence explanation.
 
-def extract_code_blocks(content: str, min_length: int = 300) -> list:
-    """Extract code blocks from markdown content."""
-    import re
-    
-    # Pattern to match code blocks with optional language
-    pattern = r'```(\w+)?\n(.*?)\n```'
-    matches = re.findall(pattern, content, re.DOTALL)
-    
-    blocks = []
-    for lang, code in matches:
-        if len(code.strip()) >= min_length:
-            # Find context around the code block
-            code_start = content.find(f'```{lang or ""}\n{code}\n```')
-            context_before = content[max(0, code_start-500):code_start]
-            context_after = content[code_start+len(code)+20:code_start+len(code)+520]
-            
-            blocks.append({
-                'language': lang or 'text',
-                'code': code.strip(),
-                'context_before': context_before,
-                'context_after': context_after
-            })
-    
-    return blocks
+    Code snippet:
+    ```
+    {code_snippet}
+    ```
 
-
-def generate_code_example_summary(code: str, context_before: str, context_after: str) -> str:
+    Assistant:
     """
-    Generate a summary for a code example using its surrounding context.
-    
-    Args:
-        code: The code example
-        context_before: Context before the code
-        context_after: Context after the code
-        
-    Returns:
-        A summary of what the code example demonstrates
-    """
-    text_model = os.getenv("BEDROCK_TEXT_MODEL")
-    if not text_model:
-        raise ValueError("BEDROCK_TEXT_MODEL environment variable is required")
-    
-    bedrock_client = get_bedrock_client()
-    
-    # Create the prompt
-    prompt = f"""<context_before>
-{context_before[-500:] if len(context_before) > 500 else context_before}
-</context_before>
-
-<code_example>
-{code[:1500] if len(code) > 1500 else code}
-</code_example>
-
-<context_after>
-{context_after[:500] if len(context_after) > 500 else context_after}
-</context_after>
-
-Based on the code example and its surrounding context, provide a concise summary (2-3 sentences) that describes what this code example demonstrates and its purpose. Focus on the practical application and key concepts illustrated.
-"""
-    
     try:
-        # Prepare request body based on model family
-        if "claude" in text_model.lower():
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 100,
-                "temperature": 0.3,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            })
-        elif "titan" in text_model.lower():
-            body = json.dumps({
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": 100,
-                    "temperature": 0.3
-                }
-            })
-        else:
-            # Default to Claude format
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 100,
-                "temperature": 0.3,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            })
-
-        # Call Bedrock for text generation
-        response = bedrock_client.invoke_model(
-            modelId=text_model,
-            body=body,
-            contentType='application/json',
-            accept='application/json'
-        )
-        
-        # Parse response based on model
-        response_body = json.loads(response['body'].read())
-        
-        if "claude" in text_model.lower():
-            return response_body['content'][0]['text'].strip()
-        elif "titan" in text_model.lower():
-            return response_body['results'][0]['outputText'].strip()
-        else:
-            # Try to extract text from common response formats
-            if 'content' in response_body and len(response_body['content']) > 0:
-                return response_body['content'][0]['text'].strip()
-            elif 'results' in response_body and len(response_body['results']) > 0:
-                return response_body['results'][0]['outputText'].strip()
-            else:
-                return "Code example for demonstration purposes."
-        
+        return generate_text(prompt)
     except Exception as e:
-        print(f"Error generating code example summary with Bedrock: {e}")
-        return "Code example for demonstration purposes."
+        print(f"Error generating code example summary: {e}")
+        return "Could not generate summary."
 
+def summarize_source(source_id: str, content_sample: str) -> str:
+    """Extract a summary for a source from its content."""
+    prompt = f"""
+    Human: Read the following content sample from the source '{source_id}'.
+    Generate a concise, one-sentence summary of the entire document's purpose.
 
-def extract_source_summary(source_id: str, content: str, max_length: int = 500) -> str:
+    Content sample:
+    \"\"\"
+    {content_sample[:4000]}
+    \"\"\"
+
+    Assistant:
     """
-    Extract a summary for a source from its content using Amazon Bedrock.
-    
-    This function uses the Bedrock API to generate a concise summary of the source content.
-    
-    Args:
-        source_id: The source ID (domain)
-        content: The content to extract a summary from
-        max_length: Maximum length of the summary
-        
-    Returns:
-        A summary string
-    """
-    # Default summary if we can't extract anything meaningful
-    default_summary = f"Content from {source_id}"
-    
-    if not content or len(content.strip()) == 0:
-        return default_summary
-    
-    # Get the text generation model from environment
-    text_model = os.getenv("BEDROCK_TEXT_MODEL")
-    if not text_model:
-        raise ValueError("BEDROCK_TEXT_MODEL environment variable is required")
-    
-    bedrock_client = get_bedrock_client()
-    
-    # Limit content length to avoid token limits
-    truncated_content = content[:25000] if len(content) > 25000 else content
-    
-    # Create the prompt for generating the summary
-    prompt = f"""<source_content>
-{truncated_content}
-</source_content>
-
-The above content is from the documentation for '{source_id}'. Please provide a concise summary (3-5 sentences) that describes what this library/tool/framework is about. The summary should help understand what the library/tool/framework accomplishes and the purpose.
-"""
-    
     try:
-        # Prepare request body based on model family
-        if "claude" in text_model.lower():
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 150,
-                "temperature": 0.3,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            })
-        elif "titan" in text_model.lower():
-            body = json.dumps({
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": 150,
-                    "temperature": 0.3
-                }
-            })
-        else:
-            # Default to Claude format
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 150,
-                "temperature": 0.3,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            })
-
-        # Call Bedrock for text generation
-        response = bedrock_client.invoke_model(
-            modelId=text_model,
-            body=body,
-            contentType='application/json',
-            accept='application/json'
-        )
-        
-        # Parse response based on model
-        response_body = json.loads(response['body'].read())
-        
-        if "claude" in text_model.lower():
-            summary = response_body['content'][0]['text'].strip()
-        elif "titan" in text_model.lower():
-            summary = response_body['results'][0]['outputText'].strip()
-        else:
-            # Try to extract text from common response formats
-            if 'content' in response_body and len(response_body['content']) > 0:
-                summary = response_body['content'][0]['text'].strip()
-            elif 'results' in response_body and len(response_body['results']) > 0:
-                summary = response_body['results'][0]['outputText'].strip()
-            else:
-                return default_summary
-        
-        # Ensure the summary is not too long
-        if len(summary) > max_length:
-            summary = summary[:max_length] + "..."
-            
-        return summary
-    
+        return generate_text(prompt)
     except Exception as e:
-        print(f"Error generating summary with Bedrock for {source_id}: {e}. Using default summary.")
-        return default_summary
+        print(f"Error generating summary for {source_id}: {e}. Using default summary.")
+        return "No summary available."
