@@ -1,6 +1,7 @@
-# smurf - semantic multi-source unified retrieval framework
 
-A containerized RAG (Retrieval-Augmented Generation) system that intelligently processes and indexes content from multiple sources. smurf provides semantic search capabilities across web pages, GitHub repositories, and other sources using vector embeddings.
+# SMURF -  Self-hosted semantic memory for AI agents
+A containerized RAG (Retrieval-Augmented Generation) system that intelligently processes and indexes content from multiple sources. SMURF provides semantic search capabilities across web pages, GitHub repositories, and other sources using vector embeddings.
+
 
 ## 🚀 Quick Start - Local Docker Setup
 
